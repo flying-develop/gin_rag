@@ -17,15 +17,16 @@
 | `LOG_LEVEL` | `INFO` | Уровень логирования: `DEBUG` / `INFO` / `WARN` / `ERROR` (регистр не важен; неизвестное значение → `INFO`) |
 | `HTTP_PORT` | `8080` | Порт, на котором сервис слушает внутри контейнера |
 | `APP_HOST_PORT` | `8080` | Порт на хосте, на который проброшен `app` в docker-compose |
-| `DATABASE_URL` | `postgres://aiapp:aiapp@postgres:5432/ai_app?sslmode=disable` | Подключение к PostgreSQL (используется начиная с вехи «Фундамент работы с БД») |
+| `DATABASE_URL` | `postgres://aiapp:aiapp@postgres:5432/ai_app?sslmode=disable` | Подключение к PostgreSQL (GORM engine и миграции golang-migrate) |
 | `POSTGRES_USER` / `POSTGRES_PASSWORD` / `POSTGRES_DB` | `aiapp` / `aiapp` / `ai_app` | Учётные данные контейнера `postgres`; держать синхронно с `DATABASE_URL` |
 | `REDIS_URL` | `redis://redis:6379/0` | Подключение к Redis (используется начиная с вехи фоновых задач) |
 | `QDRANT_URL` | `http://qdrant:6333` | Подключение к Qdrant (используется начиная с вех RAG) |
 | `OPENAI_API_KEY` | — (пусто) | Ключ OpenAI (используется начиная с вехи «Диалоги с LLM») |
 
-`DATABASE_URL`, `REDIS_URL`, `QDRANT_URL`, `OPENAI_API_KEY` на текущем
-этапе только читаются в `Config` — ни один эндпоинт от них пока не
-зависит.
+`REDIS_URL`, `QDRANT_URL`, `OPENAI_API_KEY` на текущем этапе только
+читаются в `Config` — ни один эндпоинт от них пока не зависит.
+`DATABASE_URL` уже используется: подключение GORM при старте `cmd/api`
+(нефатально) и миграции (`app migrate up|down`), см. [db.md](db.md).
 
 ## Хосты в Docker vs локально
 

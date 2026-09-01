@@ -23,6 +23,27 @@ services:
       retries: 5
       start_period: 5s
 
+  # Запуск тестов: `docker compose run --rm tests`.
+  # Рантайм-образ app — distroless без Go-тулчейна, поэтому тесты идут в
+  # отдельном контейнере на образе golang. Профиль tools исключает сервис
+  # из обычного `docker compose up`.
+  tests:
+    image: golang:1.25
+    profiles: ["tools"]
+    working_dir: /src
+    volumes:
+      - .:/src
+      - gocache:/go
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-aiapp}:${POSTGRES_PASSWORD:-aiapp}@postgres:5432/${POSTGRES_DB:-ai_app}?sslmode=disable
+      LOG_LEVEL: ${LOG_LEVEL:-DEBUG}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: ["go", "test", "./..."]
+
   postgres:
     image: postgres:16
     environment:
@@ -51,3 +72,4 @@ volumes:
   pg_data:
   redis_data:
   qdrant_data:
+  gocache:

@@ -12,6 +12,7 @@ AI-сервис на Go: диалоги с LLM, RAG по статьям, кон�
 ```bash
 cp .env.example .env
 docker compose up -d --build
+docker compose run --rm app migrate up
 curl http://localhost:8080/health
 # {"status":"ok"}
 ```
@@ -25,10 +26,11 @@ curl http://localhost:8080/health
 - **HTTP-сервис на Gin** — скелет с `/health`-эндпоинтом и graceful shutdown.
 - **Конфигурация через переменные окружения** — единый `.env`, типизированный `Config`.
 - **Структурированное логирование** — `log/slog`, уровень через `LOG_LEVEL`.
+- **PostgreSQL через GORM** — engine/пул соединений, хелпер транзакций, миграции golang-migrate (встроены в бинарь, `app migrate up|down`).
 - **Локальное окружение в Docker** — `app` + PostgreSQL + Redis + Qdrant одной командой.
 
-Остальное (работа с БД, диалоги с LLM, RAG, task pipeline, модерация)
-появляется поэтапно — см. [roadmap](.ai-factory/ROADMAP.md).
+Остальное (диалоги с LLM, RAG, task pipeline, модерация) появляется
+поэтапно — см. [roadmap](.ai-factory/ROADMAP.md).
 
 ## Документация
 
@@ -36,6 +38,7 @@ curl http://localhost:8080/health
 |--------|----------|
 | [Быстрый старт](docs/getting-started.md) | Установка, запуск через Docker и локально |
 | [Конфигурация](docs/configuration.md) | Переменные окружения |
+| [БД и миграции](docs/db.md) | GORM engine/пул, golang-migrate, тесты |
 | [Архитектура](.ai-factory/ARCHITECTURE.md) | Паттерн Structured Modules, структура папок, правила зависимостей |
 | [Описание проекта](.ai-factory/DESCRIPTION.md) | Цели, стек |
 | [Roadmap](.ai-factory/ROADMAP.md) | Этапы разработки |

@@ -32,7 +32,7 @@ SQL-файлы лежат в `migrations/` в формате golang-migrate
 # применить все миграции
 docker compose run --rm app migrate up
 
-# откатить последнюю
+# откатить все миграции (golang-migrate Down() снимает всё до пустой БД)
 docker compose run --rm app migrate down
 ```
 

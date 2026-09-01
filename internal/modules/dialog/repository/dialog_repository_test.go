@@ -26,7 +26,7 @@ func newRepo(t *testing.T) (*repository.DialogRepository, *gorm.DB) {
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = db.Close(gormDB) })
 
-	require.NoError(t, gormDB.Exec("TRUNCATE dialogs RESTART IDENTITY").Error)
+	require.NoError(t, gormDB.Exec("TRUNCATE dialogs, dialog_messages RESTART IDENTITY").Error)
 	return repository.NewDialogRepository(gormDB), gormDB
 }
 

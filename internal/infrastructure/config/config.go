@@ -40,8 +40,11 @@ type Config struct {
 	// QdrantURL — подключение к Qdrant. Заготовка под вехи RAG.
 	QdrantURL string `env:"QDRANT_URL" envDefault:"http://qdrant:6333"`
 
-	// OpenAIAPIKey — ключ OpenAI. Заготовка под вехи «Диалоги с LLM».
+	// OpenAIAPIKey — ключ OpenAI. Обязателен для эндпоинтов диалога с LLM.
 	OpenAIAPIKey string `env:"OPENAI_API_KEY"`
+
+	// OpenAIModel — имя chat-модели OpenAI для langchaingo.
+	OpenAIModel string `env:"OPENAI_MODEL" envDefault:"gpt-4o-mini"`
 }
 
 // Load читает .env (если файл присутствует) и разбирает переменные
@@ -65,11 +68,4 @@ func Load() (*Config, error) {
 	}
 
 	return &cfg, nil
-}
-
-// isNotExist сообщает, вызвана ли ошибка отсутствием файла .env.
-func isNotExist(err error) bool {
-	// godotenv возвращает *os.PathError с обёрнутым syscall.ENOENT;
-	// os.IsNotExist разбирается с обоими вариантами обёрток.
-	return err != nil && (os.IsNotExist(err))
 }

@@ -21,12 +21,13 @@
 | `POSTGRES_USER` / `POSTGRES_PASSWORD` / `POSTGRES_DB` | `aiapp` / `aiapp` / `ai_app` | Учётные данные контейнера `postgres`; держать синхронно с `DATABASE_URL` |
 | `REDIS_URL` | `redis://redis:6379/0` | Подключение к Redis (используется начиная с вехи фоновых задач) |
 | `QDRANT_URL` | `http://qdrant:6333` | Подключение к Qdrant (используется начиная с вех RAG) |
-| `OPENAI_API_KEY` | — (пусто) | Ключ OpenAI (используется начиная с вехи «Диалоги с LLM») |
+| `OPENAI_API_KEY` | — (пусто) | Ключ OpenAI. Обязателен для эндпоинтов чата (`/dialogs/:id/messages`); без него они отвечают `502`, остальное приложение работает |
+| `OPENAI_MODEL` | `gpt-4o-mini` | Имя chat-модели OpenAI для langchaingo |
 
-`REDIS_URL`, `QDRANT_URL`, `OPENAI_API_KEY` на текущем этапе только
-читаются в `Config` — ни один эндпоинт от них пока не зависит.
-`DATABASE_URL` уже используется: подключение GORM при старте `cmd/api`
-(нефатально) и миграции (`app migrate up|down`), см. [db.md](db.md).
+`REDIS_URL`, `QDRANT_URL` на текущем этапе только читаются в `Config` —
+ни один эндпоинт от них пока не зависит. `DATABASE_URL`, `OPENAI_API_KEY`,
+`OPENAI_MODEL` — используются (БД и эндпоинты чата, см. [db.md](db.md) и
+[dialog.md](dialog.md)).
 
 ## Хосты в Docker vs локально
 

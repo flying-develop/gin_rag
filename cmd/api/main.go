@@ -23,6 +23,7 @@ import (
 	"github.com/flying-develop/ai-app-go/internal/infrastructure/config"
 	"github.com/flying-develop/ai-app-go/internal/infrastructure/db"
 	"github.com/flying-develop/ai-app-go/internal/infrastructure/httpserver"
+	"github.com/flying-develop/ai-app-go/internal/infrastructure/llm"
 	"github.com/flying-develop/ai-app-go/internal/infrastructure/logging"
 	dialoghandler "github.com/flying-develop/ai-app-go/internal/modules/dialog/handler"
 	dialogrepo "github.com/flying-develop/ai-app-go/internal/modules/dialog/repository"
@@ -76,12 +77,21 @@ func run() error {
 		}
 	}()
 
+	// LLM-клиент. Без ключа не фатально: приложение поднимается, CRUD и
+	// /health работают, а эндпоинты чата отвечают 502 "llm not configured".
+	llmClient, err := llm.New(cfg, logger)
+	if err != nil {
+		logger.Error("llm client unavailable", slog.String("error", err.Error()))
+		llmClient = nil
+	}
+
 	engine := httpserver.New(cfg, logger)
 
-	// Сборка модуля dialog: repository → service → handler.
+	// Сборка модуля dialog: repository → service(s) → handler.
 	dialogRepo := dialogrepo.NewDialogRepository(gormDB)
 	dialogSvc := dialogservice.NewDialogService(dialogRepo, gormDB)
-	dialoghandler.NewDialogHandler(dialogSvc).Register(engine.Group("/api/v1"))
+	chatSvc := dialogservice.NewChatService(dialogRepo, gormDB, llmClient)
+	dialoghandler.NewDialogHandler(dialogSvc, chatSvc).Register(engine.Group("/api/v1"))
 	logger.Info("dialog module mounted", slog.String("prefix", "/api/v1"))
 
 	srv := &http.Server{
@@ -149,7 +159,7 @@ func healthcheck() error {
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	_, _ = io.Copy(io.Discard, resp.Body)
 
 	if resp.StatusCode != http.StatusOK {

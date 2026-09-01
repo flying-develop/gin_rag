@@ -30,6 +30,8 @@ internal/modules/dialog/
 | `GET` | `/dialogs/:id` | получить диалог | 200, 404 |
 | `PATCH` | `/dialogs/:id` | обновить (частично) | 200, 404, 422 |
 | `DELETE` | `/dialogs/:id` | удалить | 204, 404 |
+| `POST` | `/dialogs/:id/messages` | отправить сообщение, получить ответ LLM | 201, 404, 422, 502 |
+| `GET` | `/dialogs/:id/messages` | история сообщений диалога | 200, 404 |
 
 `user_id` в `GET /dialogs` обязателен. `limit` по умолчанию — 50.
 
@@ -46,6 +48,28 @@ internal/modules/dialog/
 { "id": 1, "user_id": 7, "title": "...", "created_at": "...", "updated_at": "..." }
 ```
 
+## Сообщения и LLM
+
+Модель `DialogMessage` (id, `dialog_id` → `dialogs` c `ON DELETE CASCADE`,
+`role`, `content`, `created_at`). Роли: `user`, `assistant`, `system`.
+
+`POST /dialogs/:id/messages` (`{"text": "..."}`, ≤ 8000 символов):
+
+1. проверяет существование диалога (иначе 404);
+2. читает историю (до 100 последних сообщений);
+3. вызывает chat-модель через `internal/infrastructure/llm` (langchaingo,
+   провайдер OpenAI за интерфейсом `llms.Model`);
+4. **при успешном ответе** одной транзакцией сохраняет сообщение
+   пользователя и ответ ассистента, возвращает ответ ассистента (201).
+
+Поведение **атомарное**: если вызов LLM завершился ошибкой — ответ `502`
+(`{"error":"llm request failed"}`), в БД ничего не пишется. Если
+`OPENAI_API_KEY` не задан — `502 {"error":"llm not configured"}`
+(приложение при этом стартует, `/health` и CRUD работают).
+
+Конфигурация: `OPENAI_API_KEY` (обязателен для чата), `OPENAI_MODEL`
+(по умолчанию `gpt-4o-mini`) — см. [configuration.md](configuration.md).
+
 ## Обработка ошибок
 
 Доменные ошибки описаны через `internal/apperr` (категории `NotFound`,
@@ -57,6 +81,7 @@ internal/modules/dialog/
 | `NotFound` | 404 | `{"error":"dialog not found"}` |
 | `Validation` | 422 | `{"error":"<детали>"}` |
 | `Conflict` | 409 | `{"error":"<сообщение>"}` |
+| `Upstream` | 502 | `{"error":"<сообщение>"}` (сбой внешнего сервиса, напр. LLM; логируется ERROR) |
 | `Internal` / прочее | 500 | `{"error":"internal error"}` (полный текст — в лог ERROR) |
 
 Хендлеры не пишут тело ошибки сами — кладут её через `c.Error(err)` и
@@ -86,7 +111,7 @@ docker compose run --rm tests
 
 ## Вне объёма (следующие вехи)
 
-- `DialogMessage` и интеграция с LLM — веха «Диалоги с LLM».
+- Streaming-ответы (SSE), tool calling, RAG-контекст — отдельные вехи.
 - Аутентификация: `user_id` пока приходит в запросе — веха «API-ключи и контексты доступа».
 
 ## See Also

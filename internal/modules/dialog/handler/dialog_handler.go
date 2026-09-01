@@ -13,14 +13,15 @@ import (
 	"github.com/flying-develop/ai-app-go/internal/modules/dialog/service"
 )
 
-// DialogHandler обслуживает CRUD-эндпоинты диалогов.
+// DialogHandler обслуживает эндпоинты диалогов и сообщений.
 type DialogHandler struct {
-	svc *service.DialogService
+	svc  *service.DialogService
+	chat *service.ChatService
 }
 
-// NewDialogHandler создаёт обработчик поверх сервиса модуля.
-func NewDialogHandler(svc *service.DialogService) *DialogHandler {
-	return &DialogHandler{svc: svc}
+// NewDialogHandler создаёт обработчик поверх сервисов модуля.
+func NewDialogHandler(svc *service.DialogService, chat *service.ChatService) *DialogHandler {
+	return &DialogHandler{svc: svc, chat: chat}
 }
 
 // Register монтирует роуты модуля в группу (например, /api/v1).
@@ -30,6 +31,9 @@ func (h *DialogHandler) Register(rg *gin.RouterGroup) {
 	rg.GET("/dialogs/:id", h.Get)
 	rg.PATCH("/dialogs/:id", h.Update)
 	rg.DELETE("/dialogs/:id", h.Delete)
+
+	rg.POST("/dialogs/:id/messages", h.SendMessage)
+	rg.GET("/dialogs/:id/messages", h.ListMessages)
 }
 
 // Create — POST /dialogs.
@@ -117,6 +121,50 @@ func (h *DialogHandler) Delete(c *gin.Context) {
 		return
 	}
 	c.Status(http.StatusNoContent)
+}
+
+// SendMessage — POST /dialogs/:id/messages.
+func (h *DialogHandler) SendMessage(c *gin.Context) {
+	id, err := pathUint(c, "id")
+	if err != nil {
+		_ = c.Error(err)
+		return
+	}
+
+	var req dto.SendMessageRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		_ = c.Error(apperr.Validationf("invalid body: %v", err))
+		return
+	}
+
+	msg, err := h.chat.SendMessage(c.Request.Context(), id, req.Text)
+	if err != nil {
+		_ = c.Error(err)
+		return
+	}
+	c.JSON(http.StatusCreated, dto.NewMessageResponse(msg))
+}
+
+// ListMessages — GET /dialogs/:id/messages.
+func (h *DialogHandler) ListMessages(c *gin.Context) {
+	id, err := pathUint(c, "id")
+	if err != nil {
+		_ = c.Error(err)
+		return
+	}
+
+	// Проверяем существование диалога — иначе пустой список неотличим от 404.
+	if _, err := h.svc.GetByID(c.Request.Context(), id); err != nil {
+		_ = c.Error(err)
+		return
+	}
+
+	messages, err := h.svc.ListMessages(c.Request.Context(), id)
+	if err != nil {
+		_ = c.Error(err)
+		return
+	}
+	c.JSON(http.StatusOK, dto.NewMessageListResponse(messages))
 }
 
 // pathUint парсит положительный целочисленный path-параметр.

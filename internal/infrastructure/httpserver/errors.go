@@ -29,12 +29,19 @@ func errorHandler(logger *slog.Logger) gin.HandlerFunc {
 		err := c.Errors.Last().Err
 		status := statusForError(err)
 
+		// 5xx логируем всегда — это сбои сервиса или его зависимостей.
 		if status >= http.StatusInternalServerError {
-			logger.Error("unhandled request error",
+			logger.Error("request failed",
+				slog.Int("status", status),
 				slog.String("path", c.Request.URL.Path),
 				slog.String("method", c.Request.Method),
 				slog.String("error", err.Error()),
 			)
+		}
+
+		// Внутреннюю ошибку клиенту не раскрываем; для остальных категорий
+		// (в т.ч. 502 upstream) отдаём заготовленное сообщение.
+		if status == http.StatusInternalServerError {
 			c.JSON(status, gin.H{"error": "internal error"})
 			return
 		}
@@ -52,6 +59,8 @@ func statusForError(err error) int {
 		return http.StatusUnprocessableEntity
 	case apperr.KindConflict:
 		return http.StatusConflict
+	case apperr.KindUpstream:
+		return http.StatusBadGateway
 	default:
 		return http.StatusInternalServerError
 	}

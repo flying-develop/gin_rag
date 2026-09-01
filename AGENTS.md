@@ -43,11 +43,12 @@ internal/
 migrations/                    # SQL up/down (golang-migrate) + embed.go
 ```
 
-Текущее состояние: вехи `Bootstrap проекта` и `Фундамент работы с БД`
-завершены (2026-09-01). Есть:
-- `internal/infrastructure/{config,logging,httpserver,db}`
-- `internal/apperr` — доменные ошибки
-- `internal/modules/dialog/` — первый модуль (CRUD, `/api/v1/dialogs`)
+Текущее состояние: вехи `Bootstrap проекта`, `Фундамент работы с БД`,
+`Диалоги с LLM (базовый чат)` завершены (2026-09-01). Есть:
+- `internal/infrastructure/{config,logging,httpserver,db,llm}`
+  (`llm` — langchaingo/OpenAI за `llms.Model`; `llm/llmtest` — fake для тестов)
+- `internal/apperr` — доменные ошибки (+ `KindUpstream` → 502)
+- `internal/modules/dialog/` — CRUD `/api/v1/dialogs` + чат `/dialogs/:id/messages`
 - `cmd/api` — подкоманды `healthcheck`, `migrate up|down`
 - `Dockerfile`, `docker-compose.yml` (+ сервис `tests`, профиль `tools`)
 
@@ -63,8 +64,9 @@ migrations/                    # SQL up/down (golang-migrate) + embed.go
 | `internal/infrastructure/db/transaction.go` | `WithinTx()` (tx кладётся в ctx) + `Conn(ctx, fallback)` |
 | `internal/infrastructure/db/migrate.go` | `Migrate(cfg, up\|down)` поверх golang-migrate |
 | `internal/infrastructure/httpserver/errors.go` | `errorHandler` — `apperr.Kind` → HTTP-код |
-| `internal/apperr/apperr.go` | доменные ошибки (`NotFound`/`Validation`/`Conflict`/`Internal`) |
-| `internal/modules/dialog/` | модуль dialog: `model`/`dto`/`service`/`repository`/`handler` |
+| `internal/infrastructure/llm/llm.go` | `New(cfg) (llms.Model, error)` — chat-модель langchaingo (OpenAI) |
+| `internal/apperr/apperr.go` | доменные ошибки (`NotFound`/`Validation`/`Conflict`/`Upstream`/`Internal`) |
+| `internal/modules/dialog/` | модуль dialog: CRUD + `ChatService` (сообщения, вызов LLM) |
 | `migrations/` | SQL up/down + `embed.go` (встроены в бинарь через `go:embed`) |
 | `Dockerfile` | multi-stage сборка статического бинаря → distroless |
 | `docker-compose.yml` | локальное окружение: app + PostgreSQL + Redis + Qdrant + `tests` (профиль `tools`) |

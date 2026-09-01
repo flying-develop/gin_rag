@@ -11,8 +11,11 @@ import (
 	"github.com/flying-develop/ai-app-go/internal/modules/dialog/model"
 )
 
-// defaultListLimit применяется, когда вызывающий код не задал лимит.
-const defaultListLimit = 50
+// Дефолтные лимиты выборок, когда вызывающий код не задал свой.
+const (
+	defaultListLimit    = 50
+	defaultMessageLimit = 100
+)
 
 // DialogRepository реализует service.DialogRepository поверх GORM.
 type DialogRepository struct {
@@ -76,4 +79,28 @@ func (r *DialogRepository) Delete(ctx context.Context, id uint) (bool, error) {
 		return false, res.Error
 	}
 	return res.RowsAffected > 0, nil
+}
+
+func (r *DialogRepository) AppendMessages(ctx context.Context, messages ...*model.DialogMessage) error {
+	if len(messages) == 0 {
+		return nil
+	}
+	return r.conn(ctx).Create(&messages).Error
+}
+
+func (r *DialogRepository) ListMessages(ctx context.Context, dialogID uint, limit int) ([]model.DialogMessage, error) {
+	if limit <= 0 {
+		limit = defaultMessageLimit
+	}
+
+	var messages []model.DialogMessage
+	err := r.conn(ctx).
+		Where("dialog_id = ?", dialogID).
+		Order("id ASC").
+		Limit(limit).
+		Find(&messages).Error
+	if err != nil {
+		return nil, err
+	}
+	return messages, nil
 }

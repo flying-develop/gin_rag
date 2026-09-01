@@ -27,6 +27,12 @@ docker compose ps
 # app и postgres должны быть в статусе "healthy"
 ```
 
+Применить миграции БД:
+
+```bash
+docker compose run --rm app migrate up
+```
+
 Логи приложения (структурированный формат `key=value`):
 
 ```bash
@@ -67,8 +73,15 @@ curl http://localhost:8080/health
 На хосте без Go — через контейнер:
 
 ```bash
-docker run --rm -v "$PWD":/app -w /app golang:1.25 \
+docker run --rm -v "$PWD":/app -w /app -e GOFLAGS=-buildvcs=false golang:1.25 \
   sh -c "gofmt -l . && go vet ./... && go build ./..."
+```
+
+Тесты (нужен запущенный `postgres`):
+
+```bash
+docker compose up -d postgres
+docker compose run --rm tests
 ```
 
 ## Следующие шаги

@@ -43,29 +43,36 @@ migrations/                    # SQL up/down (golang-migrate)
 ```
 
 Текущее состояние: веха `Bootstrap проекта` завершена (2026-09-01).
-Созданы `internal/infrastructure/{config,logging,httpserver}`, `cmd/api`
-(с подкомандой `healthcheck`), `Dockerfile`, `docker-compose.yml`.
-`internal/modules/` пока пуст — модули появляются с вехи «Фундамент
-работы с БД».
+Веха `Фундамент работы с БД` в работе — план 1 (GORM + golang-migrate)
+готов, план 2 (модуль `dialog` CRUD) не начат.
+Созданы `internal/infrastructure/{config,logging,httpserver,db}`,
+`cmd/api` (подкоманды `healthcheck`, `migrate up|down`), пакет
+`migrations` (встроенные SQL), `Dockerfile`, `docker-compose.yml`
+(+ сервис `tests`). `internal/modules/` пока пуст — модули появляются
+со второго плана этой вехи.
 
 ## Ключевые точки входа
 
 | Файл | Назначение |
 |------|------------|
-| `cmd/api/main.go` | сборка зависимостей, запуск сервера, graceful shutdown; подкоманда `healthcheck` для Docker HEALTHCHECK |
+| `cmd/api/main.go` | точка входа; `dispatch()`: подкоманды `healthcheck`, `migrate up\|down`, иначе HTTP-сервер |
 | `internal/infrastructure/config/config.go` | загрузка настроек из env / `.env` (`Config`, `Load()`) |
 | `internal/infrastructure/logging/logging.go` | настройка `log/slog` (`Setup()`) |
 | `internal/infrastructure/httpserver/server.go` | сборка Gin-движка, middleware `accessLog`, `/health` |
+| `internal/infrastructure/db/db.go` | GORM engine, пул соединений, `Open()`/`Close()` |
+| `internal/infrastructure/db/transaction.go` | `WithinTx()` — хелпер транзакций |
+| `internal/infrastructure/db/migrate.go` | `Migrate(cfg, up\|down)` поверх golang-migrate |
+| `migrations/` | SQL up/down + `embed.go` (встроены в бинарь через `go:embed`) |
 | `Dockerfile` | multi-stage сборка статического бинаря → distroless |
-| `docker-compose.yml` | локальное окружение: app + PostgreSQL + Redis + Qdrant |
+| `docker-compose.yml` | локальное окружение: app + PostgreSQL + Redis + Qdrant + `tests` (профиль `tools`) |
 
-## Тесты и миграции — только через Docker
+## Тесты, сборка и миграции — только через Docker
 
-- Тесты: `docker compose up -d postgres`, затем
-  `docker compose run --rm app go test ./...` (реальная БД, без моков).
-- Миграции: команды уточняются на вехе «Фундамент работы с БД».
-- На хосте Go не установлен — сборка и проверки идут через контейнер
-  `golang` или образ приложения.
+- На хосте Go нет. Сборка/vet/fmt: `docker run --rm -v "$PWD":/app -w /app -e GOFLAGS=-buildvcs=false golang:1.25 sh -c "gofmt -l . && go vet ./... && go build ./..."`.
+- Тесты: `docker compose up -d postgres`, затем `docker compose run --rm tests`
+  (образ `golang`; рантайм-образ `app` — distroless без Go). Реальная БД, без моков.
+- Миграции: `docker compose run --rm app migrate up` / `migrate down`.
+  После изменения кода подкоманд — сначала `docker compose build app`.
 
 ## Документация
 
@@ -74,6 +81,7 @@ migrations/                    # SQL up/down (golang-migrate)
 | README | `README.md` | Лендинг-страница проекта |
 | Быстрый старт | `docs/getting-started.md` | Установка, запуск через Docker и локально |
 | Конфигурация | `docs/configuration.md` | Переменные окружения |
+| БД и миграции | `docs/db.md` | GORM engine/пул, `WithinTx`, golang-migrate, тесты |
 | DESCRIPTION | `.ai-factory/DESCRIPTION.md` | Спецификация проекта, стек |
 | ARCHITECTURE | `.ai-factory/ARCHITECTURE.md` | Structured Modules — структура папок, правила зависимостей, примеры кода |
 | Roadmap | `.ai-factory/ROADMAP.md` | Этапы разработки |
@@ -85,9 +93,10 @@ migrations/                    # SQL up/down (golang-migrate)
 - Доменные термины: «сообщения», «модерация проектов».
 - Разбивай составные shell-команды на отдельные шаги вместо
   объединения через `&&`.
-- Проект без git (`.git` отсутствует, `config.yaml` → `git.enabled: false`)
-  — ветки не создаются, все изменения делаются напрямую в рабочей
-  директории, чекпоинты в планах — только логические.
+- AI Factory работает в режиме без git (`config.yaml` → `git.enabled: false`):
+  `/aif-plan` не создаёт ветки, чекпоинты в планах — только логические.
+  Репозиторий git при этом существует (`master`) — коммиты делает
+  пользователь вручную, пока `git.enabled` не переключён.
 - Локальное окружение (БД, Redis, Qdrant, сам сервис) поднимается
   через Docker / docker compose, а не напрямую на хосте.
 - Перед сдачей кода: `gofmt`/`goimports`, `go vet`, `go build ./...`,

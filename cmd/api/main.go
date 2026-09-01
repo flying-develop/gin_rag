@@ -1,11 +1,11 @@
-// Команда api — точка входа HTTP-сервиса.
+// Команда api — точка входа сервиса.
 //
-// Здесь собираются зависимости (конфиг, логгер, HTTP-движок), запускается
-// сервер и обрабатывается graceful shutdown по SIGINT/SIGTERM.
+// Без аргументов запускает HTTP-сервер (Gin) с graceful shutdown по
+// SIGINT/SIGTERM. Поддерживает подкоманды:
 //
-// Подкоманда `healthcheck` используется в HEALTHCHECK Docker-образа
-// (в distroless-образе нет curl/wget): процесс делает GET /health и
-// завершается с кодом 0 при 200 и 1 в противном случае.
+//	api healthcheck      — GET /health к локальному серверу, exit 0/1
+//	                       (используется в HEALTHCHECK Docker-образа, где нет curl)
+//	api migrate up|down  — применить / откатить миграции БД
 package main
 
 import (
@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/flying-develop/ai-app-go/internal/infrastructure/config"
+	"github.com/flying-develop/ai-app-go/internal/infrastructure/db"
 	"github.com/flying-develop/ai-app-go/internal/infrastructure/httpserver"
 	"github.com/flying-develop/ai-app-go/internal/infrastructure/logging"
 )
@@ -29,21 +30,25 @@ import (
 const shutdownTimeout = 10 * time.Second
 
 func main() {
-	if len(os.Args) > 1 && os.Args[1] == "healthcheck" {
-		if err := healthcheck(); err != nil {
-			fmt.Fprintln(os.Stderr, "healthcheck:", err)
-			os.Exit(1)
-		}
-		return
-	}
-
-	if err := run(); err != nil {
-		slog.Error("fatal", slog.String("error", err.Error()))
+	if err := dispatch(os.Args[1:]); err != nil {
+		fmt.Fprintln(os.Stderr, "error:", err)
 		os.Exit(1)
 	}
 }
 
-// run собирает приложение и блокируется до сигнала остановки.
+// dispatch выбирает подкоманду по аргументам.
+func dispatch(args []string) error {
+	switch {
+	case len(args) >= 1 && args[0] == "healthcheck":
+		return healthcheck()
+	case len(args) >= 2 && args[0] == "migrate":
+		return runMigrate(args[1])
+	default:
+		return run()
+	}
+}
+
+// run собирает HTTP-приложение и блокируется до сигнала остановки.
 func run() error {
 	cfg, err := config.Load()
 	if err != nil {
@@ -52,6 +57,23 @@ func run() error {
 
 	logger := logging.Setup(cfg.LogLevel)
 
+	// Контекст, отменяемый по SIGINT/SIGTERM.
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+
+	// Подключение к БД. На этой вехе ни один эндпоинт от БД не зависит,
+	// поэтому недоступная БД при старте не фатальна — только ERROR-лог.
+	gormDB, err := db.Open(ctx, cfg, logger)
+	if err != nil {
+		logger.Error("database unavailable at startup", slog.String("error", err.Error()))
+	} else {
+		defer func() {
+			if cerr := db.Close(gormDB); cerr != nil {
+				logger.Error("database close failed", slog.String("error", cerr.Error()))
+			}
+		}()
+	}
+
 	engine := httpserver.New(cfg, logger)
 
 	srv := &http.Server{
@@ -59,10 +81,6 @@ func run() error {
 		Handler:           engine,
 		ReadHeaderTimeout: 10 * time.Second,
 	}
-
-	// Контекст, отменяемый по SIGINT/SIGTERM.
-	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
-	defer stop()
 
 	// Ошибка запуска ListenAndServe приходит по этому каналу.
 	serverErr := make(chan error, 1)
@@ -94,6 +112,20 @@ func run() error {
 
 	logger.Info("server stopped")
 	return nil
+}
+
+// runMigrate применяет или откатывает миграции БД и завершает процесс.
+func runMigrate(direction string) error {
+	cfg, err := config.Load()
+	if err != nil {
+		return err
+	}
+	logging.Setup(cfg.LogLevel)
+
+	if direction != db.DirectionUp && direction != db.DirectionDown {
+		return fmt.Errorf("usage: api migrate up|down (получено %q)", direction)
+	}
+	return db.Migrate(cfg, direction)
 }
 
 // healthcheck делает GET /health к локальному серверу и возвращает ошибку,

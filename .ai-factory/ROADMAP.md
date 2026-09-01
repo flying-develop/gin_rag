@@ -9,7 +9,7 @@
   `cmd/api/main.go`, `internal/infrastructure/config` на env),
   docker-compose (app + PostgreSQL + Redis + Qdrant), структурированное
   логирование (`log/slog`, уровень через `LOG_LEVEL`), `/health`-эндпоинт.
-- [ ] **Фундамент работы с БД** — GORM (`*gorm.DB`, пул соединений,
+- [x] **Фундамент работы с БД** — GORM (`*gorm.DB`, пул соединений,
   хелпер транзакций), golang-migrate миграции, первый модуль (`dialog`)
   со сквозным CRUD через repository-паттерн — база для остальных модулей.
 - [ ] **Диалоги с LLM (базовый чат)** — модели `Dialog`/`DialogMessage`,
@@ -51,3 +51,4 @@
 | Веха | Дата |
 |------|------|
 | Bootstrap проекта | 2026-09-01 |
+| Фундамент работы с БД | 2026-09-01 |

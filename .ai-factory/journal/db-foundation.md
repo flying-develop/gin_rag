@@ -93,3 +93,87 @@
 встроенные миграции golang-migrate с подкомандами `migrate up|down`,
 тесты против реального Postgres. Моделей и репозиториев ещё нет — это
 следующий план вехи (`dialog`-модуль).
+
+## План 2: Модуль dialog — сквозной CRUD
+
+### Task 1 — Миграция `000002_create_dialogs`
+
+- `dialogs` (id bigserial, user_id bigint, title text, created_at/updated_at
+  timestamptz) + `idx_dialogs_user_id`. up/down.
+
+### Task 2 — Модель и DTO
+
+- `model/dialog.go` — `Dialog` + `TableName()`.
+- `dto/dialog.go` — `CreateDialogRequest` (`user_id` required, `title` max=200),
+  `UpdateDialogRequest` (`*string` title), `DialogResponse` + мапперы.
+
+### Task 3 — Доменные ошибки и порт репозитория
+
+- ⚠️ **Отклонение от плана (к лучшему):** вместо `errors.New` и импорта
+  `dialog/service` в `httpserver` заведён нейтральный пакет
+  `internal/apperr` (Kind: NotFound/Validation/Conflict/Internal, тип
+  `*Error`, хелперы). И модули, и `httpserver` зависят от него — правило
+  «repository/model не зависят от внешних слоёв» не нарушается.
+- `service/errors.go`: `ErrDialogNotFound = apperr.NotFound("dialog not found")`.
+- `service/ports.go`: интерфейс `DialogRepository` на стороне потребителя.
+  Метод `WithTx` **не добавлен** — транзакции прозрачны через ctx.
+
+### Task 4 — Репозиторий
+
+- `repository/dialog_repository.go` — Create/FindByID/List/Update/Delete.
+- ⚠️ **Отклонение:** вместо `r.db.WithContext(ctx)` метод `r.conn(ctx)`
+  через новый хелпер `db.Conn(ctx, fallback)` — достаёт активную
+  транзакцию из ctx, иначе базовое подключение. Это исключило импорт
+  `service` в `repository` (не было бы восходящей зависимости) и
+  необходимость `WithTx`-метода в интерфейсе.
+- `db.WithinTx` переписан: сигнатура `func(ctx context.Context) error`,
+  кладёт `*gorm.DB` транзакции в ctx (ключ `txContextKey`). Тесты
+  `db_test.go` из плана 1 обновлены под новую сигнатуру.
+
+### Task 5 — Сервис
+
+- `service/dialog_service.go` — `DialogService{repo, db, log}`.
+  `Update` — внутри `db.WithinTx(ctx, s.db, func(txCtx) {...})`, репозиторий
+  подхватывает транзакцию из `txCtx`.
+- INFO-логи `dialog created/updated/deleted` с `dialog_id`.
+
+### Task 6 — Error-middleware
+
+- `httpserver/errors.go` — `errorHandler(logger)`: `apperr.KindOf(err)` →
+  HTTP-код (404/422/409/500). 5xx → ERROR-лог + `{"error":"internal error"}`;
+  4xx → `{"error": apperr.ClientMessage(err)}`. Подключён в цепочку
+  middleware в `server.go`.
+
+### Task 7 — Хендлеры
+
+- `handler/dialog_handler.go` — `DialogHandler` + 5 методов + `Register(rg)`.
+  Ошибки биндинга/парсинга `:id` → `apperr.Validationf(...)` через `c.Error`.
+  Доменные ошибки сервиса — `c.Error(err)`, middleware разбирает.
+
+### Task 8 — Сборка в main.go
+
+- `run()`: `db.Open` теперь **фатально** при ошибке. Сборка
+  `repo → service → handler`, `h.Register(engine.Group("/api/v1"))`,
+  INFO `"dialog module mounted"`.
+
+### Task 9 — Тесты
+
+- `repository/dialog_repository_test.go` (5 тестов) и
+  `handler/dialog_handler_test.go` (CRUD-цикл + валидация) против реального
+  Postgres. `db.Migrate(cfg, up)` в setup, `TRUNCATE ... RESTART IDENTITY`.
+- 🐛 **Гонка между пакетами:** `go test ./...` гоняет пакеты параллельно —
+  `repository_test` и `handler_test` бьют в одну БД, тесты видели чужие
+  строки. Фикс: `command: ["go","test","-p","1","./..."]` в сервисе
+  `tests` (последовательный прогон пакетов).
+
+### Task 10 — Сквозная проверка
+
+- `docker compose run --rm tests` → всё зелёное.
+- `curl` полный цикл против `:8090/api/v1/dialogs`: POST 201 → GET 200 →
+  LIST 200 → PATCH 200 (`updated_at` изменился) → DELETE 204 → GET 404;
+  POST без `user_id` → 422; LIST без `user_id` → 422.
+
+**Итог вехи «Фундамент работы с БД»:** оба плана завершены. Есть
+инфраструктура БД (GORM, транзакции, миграции) и первый доменный модуль
+`dialog` со сквозным `handler → service → repository` и CRUD-эндпоинтами.
+Появился общий пакет `internal/apperr` для доменных ошибок. Веха закрыта.

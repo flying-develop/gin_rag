@@ -28,10 +28,11 @@ curl http://localhost:8080/health
 - **Структурированное логирование** — `log/slog`, уровень через `LOG_LEVEL`.
 - **PostgreSQL через GORM** — engine/пул соединений, хелпер транзакций, миграции golang-migrate (встроены в бинарь, `app migrate up|down`).
 - **Модуль `dialog`** — CRUD по диалогам (`/api/v1/dialogs`) по паттерну Structured Modules, единый обработчик ошибок.
+- **Базовый чат с LLM** — `POST /api/v1/dialogs/:id/messages`: вызов chat-модели (langchaingo/OpenAI) с историей диалога, атомарное сохранение сообщений.
 - **Локальное окружение в Docker** — `app` + PostgreSQL + Redis + Qdrant одной командой.
 
-Остальное (интеграция диалогов с LLM, RAG, task pipeline, модерация)
-появляется поэтапно — см. [roadmap](.ai-factory/ROADMAP.md).
+Остальное (tool calling, RAG, task pipeline, модерация) появляется
+поэтапно — см. [roadmap](.ai-factory/ROADMAP.md).
 
 ## Документация
 

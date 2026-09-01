@@ -22,4 +22,10 @@ type DialogRepository interface {
 	Update(ctx context.Context, d *model.Dialog) error
 	// Delete удаляет диалог; false — если строки с таким id не было.
 	Delete(ctx context.Context, id uint) (bool, error)
+
+	// AppendMessages создаёт сообщения в порядке передачи.
+	AppendMessages(ctx context.Context, messages ...*model.DialogMessage) error
+	// ListMessages возвращает сообщения диалога по возрастанию id
+	// (limit ≤ 0 → дефолт 100).
+	ListMessages(ctx context.Context, dialogID uint, limit int) ([]model.DialogMessage, error)
 }

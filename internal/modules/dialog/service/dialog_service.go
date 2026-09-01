@@ -61,6 +61,15 @@ func (s *DialogService) List(ctx context.Context, userID uint, limit, offset int
 	return dialogs, nil
 }
 
+// ListMessages возвращает историю сообщений диалога (по возрастанию id).
+func (s *DialogService) ListMessages(ctx context.Context, dialogID uint) ([]model.DialogMessage, error) {
+	messages, err := s.repo.ListMessages(ctx, dialogID, 0)
+	if err != nil {
+		return nil, fmt.Errorf("list messages for dialog %d: %w", dialogID, err)
+	}
+	return messages, nil
+}
+
 // Update применяет частичное изменение диалога внутри транзакции.
 func (s *DialogService) Update(ctx context.Context, id uint, req dto.UpdateDialogRequest) (*model.Dialog, error) {
 	var updated *model.Dialog

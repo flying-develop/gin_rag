@@ -23,6 +23,8 @@ const (
 	KindValidation
 	// KindConflict — конфликт состояния (409).
 	KindConflict
+	// KindUpstream — сбой внешнего сервиса, от которого зависит запрос (502).
+	KindUpstream
 )
 
 // Error — доменная ошибка с категорией и сообщением для клиента.
@@ -59,6 +61,11 @@ func Validationf(format string, args ...any) *Error {
 // Conflict создаёт ошибку категории KindConflict.
 func Conflict(message string) *Error {
 	return &Error{Kind: KindConflict, Message: message}
+}
+
+// Upstream создаёт ошибку категории KindUpstream с обёрнутой причиной.
+func Upstream(message string, cause error) *Error {
+	return &Error{Kind: KindUpstream, Message: message, Err: cause}
 }
 
 // KindOf извлекает категорию из ошибки; для не-*Error возвращает KindInternal.

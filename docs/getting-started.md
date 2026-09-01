@@ -23,6 +23,10 @@ docker compose up -d --build
 curl http://localhost:8080/health
 # {"status":"ok"}
 
+# CRUD по диалогам (см. docs/dialog.md)
+curl -s -XPOST http://localhost:8080/api/v1/dialogs \
+  -H 'Content-Type: application/json' -d '{"user_id":7,"title":"первый"}'
+
 docker compose ps
 # app и postgres должны быть в статусе "healthy"
 ```

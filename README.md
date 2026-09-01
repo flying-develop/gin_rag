@@ -27,10 +27,11 @@ curl http://localhost:8080/health
 - **Конфигурация через переменные окружения** — единый `.env`, типизированный `Config`.
 - **Структурированное логирование** — `log/slog`, уровень через `LOG_LEVEL`.
 - **PostgreSQL через GORM** — engine/пул соединений, хелпер транзакций, миграции golang-migrate (встроены в бинарь, `app migrate up|down`).
+- **Модуль `dialog`** — CRUD по диалогам (`/api/v1/dialogs`) по паттерну Structured Modules, единый обработчик ошибок.
 - **Локальное окружение в Docker** — `app` + PostgreSQL + Redis + Qdrant одной командой.
 
-Остальное (диалоги с LLM, RAG, task pipeline, модерация) появляется
-поэтапно — см. [roadmap](.ai-factory/ROADMAP.md).
+Остальное (интеграция диалогов с LLM, RAG, task pipeline, модерация)
+появляется поэтапно — см. [roadmap](.ai-factory/ROADMAP.md).
 
 ## Документация
 
@@ -39,6 +40,7 @@ curl http://localhost:8080/health
 | [Быстрый старт](docs/getting-started.md) | Установка, запуск через Docker и локально |
 | [Конфигурация](docs/configuration.md) | Переменные окружения |
 | [БД и миграции](docs/db.md) | GORM engine/пул, golang-migrate, тесты |
+| [Модуль dialog](docs/dialog.md) | CRUD по диалогам, структура модуля, эндпоинты |
 | [Архитектура](.ai-factory/ARCHITECTURE.md) | Паттерн Structured Modules, структура папок, правила зависимостей |
 | [Описание проекта](.ai-factory/DESCRIPTION.md) | Цели, стек |
 | [Roadmap](.ai-factory/ROADMAP.md) | Этапы разработки |

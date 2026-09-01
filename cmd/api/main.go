@@ -24,6 +24,9 @@ import (
 	"github.com/flying-develop/ai-app-go/internal/infrastructure/db"
 	"github.com/flying-develop/ai-app-go/internal/infrastructure/httpserver"
 	"github.com/flying-develop/ai-app-go/internal/infrastructure/logging"
+	dialoghandler "github.com/flying-develop/ai-app-go/internal/modules/dialog/handler"
+	dialogrepo "github.com/flying-develop/ai-app-go/internal/modules/dialog/repository"
+	dialogservice "github.com/flying-develop/ai-app-go/internal/modules/dialog/service"
 )
 
 // shutdownTimeout — сколько ждём завершения активных запросов при остановке.
@@ -61,20 +64,25 @@ func run() error {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	// Подключение к БД. На этой вехе ни один эндпоинт от БД не зависит,
-	// поэтому недоступная БД при старте не фатальна — только ERROR-лог.
+	// Подключение к БД. CRUD-эндпоинты диалогов от неё зависят —
+	// недоступность БД при старте фатальна.
 	gormDB, err := db.Open(ctx, cfg, logger)
 	if err != nil {
-		logger.Error("database unavailable at startup", slog.String("error", err.Error()))
-	} else {
-		defer func() {
-			if cerr := db.Close(gormDB); cerr != nil {
-				logger.Error("database close failed", slog.String("error", cerr.Error()))
-			}
-		}()
+		return err
 	}
+	defer func() {
+		if cerr := db.Close(gormDB); cerr != nil {
+			logger.Error("database close failed", slog.String("error", cerr.Error()))
+		}
+	}()
 
 	engine := httpserver.New(cfg, logger)
+
+	// Сборка модуля dialog: repository → service → handler.
+	dialogRepo := dialogrepo.NewDialogRepository(gormDB)
+	dialogSvc := dialogservice.NewDialogService(dialogRepo, gormDB)
+	dialoghandler.NewDialogHandler(dialogSvc).Register(engine.Group("/api/v1"))
+	logger.Info("dialog module mounted", slog.String("prefix", "/api/v1"))
 
 	srv := &http.Server{
 		Addr:              ":" + cfg.HTTPPort,

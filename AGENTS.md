@@ -36,20 +36,20 @@ cmd/
 ├── api/main.go                # точка входа HTTP-сервиса
 └── worker/main.go             # asynq-воркер (веха фоновых задач)
 internal/
+├── apperr/                    # общий словарь доменных ошибок (Kind → HTTP-код)
 ├── modules/                   # доменные модули: dialog, rag, tasks, moderation, files
 │   └── <module>/{handler,service,repository,model,dto}/
 └── infrastructure/            # config, db, redis, qdrant, llm, httpserver, logging
-migrations/                    # SQL up/down (golang-migrate)
+migrations/                    # SQL up/down (golang-migrate) + embed.go
 ```
 
-Текущее состояние: веха `Bootstrap проекта` завершена (2026-09-01).
-Веха `Фундамент работы с БД` в работе — план 1 (GORM + golang-migrate)
-готов, план 2 (модуль `dialog` CRUD) не начат.
-Созданы `internal/infrastructure/{config,logging,httpserver,db}`,
-`cmd/api` (подкоманды `healthcheck`, `migrate up|down`), пакет
-`migrations` (встроенные SQL), `Dockerfile`, `docker-compose.yml`
-(+ сервис `tests`). `internal/modules/` пока пуст — модули появляются
-со второго плана этой вехи.
+Текущее состояние: вехи `Bootstrap проекта` и `Фундамент работы с БД`
+завершены (2026-09-01). Есть:
+- `internal/infrastructure/{config,logging,httpserver,db}`
+- `internal/apperr` — доменные ошибки
+- `internal/modules/dialog/` — первый модуль (CRUD, `/api/v1/dialogs`)
+- `cmd/api` — подкоманды `healthcheck`, `migrate up|down`
+- `Dockerfile`, `docker-compose.yml` (+ сервис `tests`, профиль `tools`)
 
 ## Ключевые точки входа
 
@@ -60,8 +60,11 @@ migrations/                    # SQL up/down (golang-migrate)
 | `internal/infrastructure/logging/logging.go` | настройка `log/slog` (`Setup()`) |
 | `internal/infrastructure/httpserver/server.go` | сборка Gin-движка, middleware `accessLog`, `/health` |
 | `internal/infrastructure/db/db.go` | GORM engine, пул соединений, `Open()`/`Close()` |
-| `internal/infrastructure/db/transaction.go` | `WithinTx()` — хелпер транзакций |
+| `internal/infrastructure/db/transaction.go` | `WithinTx()` (tx кладётся в ctx) + `Conn(ctx, fallback)` |
 | `internal/infrastructure/db/migrate.go` | `Migrate(cfg, up\|down)` поверх golang-migrate |
+| `internal/infrastructure/httpserver/errors.go` | `errorHandler` — `apperr.Kind` → HTTP-код |
+| `internal/apperr/apperr.go` | доменные ошибки (`NotFound`/`Validation`/`Conflict`/`Internal`) |
+| `internal/modules/dialog/` | модуль dialog: `model`/`dto`/`service`/`repository`/`handler` |
 | `migrations/` | SQL up/down + `embed.go` (встроены в бинарь через `go:embed`) |
 | `Dockerfile` | multi-stage сборка статического бинаря → distroless |
 | `docker-compose.yml` | локальное окружение: app + PostgreSQL + Redis + Qdrant + `tests` (профиль `tools`) |
@@ -71,6 +74,7 @@ migrations/                    # SQL up/down (golang-migrate)
 - На хосте Go нет. Сборка/vet/fmt: `docker run --rm -v "$PWD":/app -w /app -e GOFLAGS=-buildvcs=false golang:1.25 sh -c "gofmt -l . && go vet ./... && go build ./..."`.
 - Тесты: `docker compose up -d postgres`, затем `docker compose run --rm tests`
   (образ `golang`; рантайм-образ `app` — distroless без Go). Реальная БД, без моков.
+  Прогон последовательный (`-p 1`) — пакеты БД-тестов делят одну базу.
 - Миграции: `docker compose run --rm app migrate up` / `migrate down`.
   После изменения кода подкоманд — сначала `docker compose build app`.
 
@@ -82,6 +86,7 @@ migrations/                    # SQL up/down (golang-migrate)
 | Быстрый старт | `docs/getting-started.md` | Установка, запуск через Docker и локально |
 | Конфигурация | `docs/configuration.md` | Переменные окружения |
 | БД и миграции | `docs/db.md` | GORM engine/пул, `WithinTx`, golang-migrate, тесты |
+| Модуль dialog | `docs/dialog.md` | CRUD по диалогам, структура модуля, эндпоинты |
 | DESCRIPTION | `.ai-factory/DESCRIPTION.md` | Спецификация проекта, стек |
 | ARCHITECTURE | `.ai-factory/ARCHITECTURE.md` | Structured Modules — структура папок, правила зависимостей, примеры кода |
 | Roadmap | `.ai-factory/ROADMAP.md` | Этапы разработки |

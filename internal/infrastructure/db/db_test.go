@@ -43,8 +43,8 @@ func TestWithinTx_CommitsOnSuccess(t *testing.T) {
 	ctx := context.Background()
 	setupTxTable(t, gormDB)
 
-	err := db.WithinTx(ctx, gormDB, func(tx *gorm.DB) error {
-		return tx.Exec("INSERT INTO tx_test (marker) VALUES (?)", "commit").Error
+	err := db.WithinTx(ctx, gormDB, func(txCtx context.Context) error {
+		return db.Conn(txCtx, gormDB).Exec("INSERT INTO tx_test (marker) VALUES (?)", "commit").Error
 	})
 	require.NoError(t, err)
 
@@ -57,8 +57,8 @@ func TestWithinTx_RollsBackOnError(t *testing.T) {
 	setupTxTable(t, gormDB)
 
 	sentinel := errors.New("boom")
-	err := db.WithinTx(ctx, gormDB, func(tx *gorm.DB) error {
-		if e := tx.Exec("INSERT INTO tx_test (marker) VALUES (?)", "rollback").Error; e != nil {
+	err := db.WithinTx(ctx, gormDB, func(txCtx context.Context) error {
+		if e := db.Conn(txCtx, gormDB).Exec("INSERT INTO tx_test (marker) VALUES (?)", "rollback").Error; e != nil {
 			return e
 		}
 		return sentinel

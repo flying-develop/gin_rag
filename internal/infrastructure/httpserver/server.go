@@ -22,7 +22,7 @@ func New(cfg *config.Config, logger *slog.Logger) *gin.Engine {
 	gin.SetMode(ginMode(cfg.LogLevel))
 
 	engine := gin.New()
-	engine.Use(accessLog(logger), gin.Recovery())
+	engine.Use(accessLog(logger), gin.Recovery(), errorHandler(logger))
 
 	engine.GET("/health", func(c *gin.Context) {
 		logger.Debug("health check requested", slog.String("client_ip", c.ClientIP()))

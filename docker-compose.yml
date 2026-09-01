@@ -42,7 +42,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-    command: ["go", "test", "./..."]
+    # -p 1: пакеты с БД-тестами делят одну базу — гонять их последовательно.
+    command: ["go", "test", "-p", "1", "./..."]
 
   postgres:
     image: postgres:16

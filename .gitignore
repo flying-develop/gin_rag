@@ -1,0 +1,29 @@
+# окружение (секреты)
+.env
+.env.*
+!.env.example
+
+# скомпилированные бинарники
+/api
+/bin/
+/dist/
+*.exe
+*.test
+*.out
+
+# покрытие тестами
+coverage.out
+coverage.html
+
+# кэши инструментов Go
+/vendor/
+/.gocache/
+
+# IDE / ОС
+.idea/
+.vscode/
+.DS_Store
+
+.claude
+.codex
+.ai-factory/PLAN.MD

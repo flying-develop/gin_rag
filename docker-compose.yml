@@ -1,0 +1,53 @@
+services:
+  app:
+    build: .
+    env_file:
+      - .env
+    environment:
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      # Порт внутри контейнера фиксирован — маппинг наружу через APP_HOST_PORT.
+      HTTP_PORT: "8080"
+    ports:
+      - "${APP_HOST_PORT:-8080}:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+      qdrant:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "/app/api", "healthcheck"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-aiapp}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-aiapp}
+      POSTGRES_DB: ${POSTGRES_DB:-ai_app}
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-aiapp} -d ${POSTGRES_DB:-ai_app}"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  redis:
+    image: redis:7
+    volumes:
+      - redis_data:/data
+
+  qdrant:
+    image: qdrant/qdrant
+    volumes:
+      - qdrant_data:/qdrant/storage
+
+volumes:
+  pg_data:
+  redis_data:
+  qdrant_data:

@@ -126,11 +126,3 @@ func chatRole(role string) llms.ChatMessageType {
 		return llms.ChatMessageTypeHuman
 	}
 }
-
-// firstChoice достаёт текст первого варианта ответа LLM.
-func firstChoice(resp *llms.ContentResponse) string {
-	if resp == nil || len(resp.Choices) == 0 {
-		return ""
-	}
-	return resp.Choices[0].Content
-}

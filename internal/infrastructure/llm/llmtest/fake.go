@@ -30,6 +30,10 @@ type Fake struct {
 	// приоритет над Answer/Err.
 	Responses []Response
 
+	// ToolLoop — если задан (и Responses пуст), каждый вызов возвращает ответ
+	// с этими ToolCalls. Для теста лимита шагов машины состояний.
+	ToolLoop []llms.ToolCall
+
 	LastMessages []llms.MessageContent
 	// Prompts — копия messages каждого вызова GenerateContent по порядку.
 	Prompts [][]llms.MessageContent
@@ -55,6 +59,11 @@ func (f *Fake) GenerateContent(_ context.Context, messages []llms.MessageContent
 
 	if f.Err != nil {
 		return nil, f.Err
+	}
+	if len(f.ToolLoop) > 0 {
+		return &llms.ContentResponse{
+			Choices: []*llms.ContentChoice{{ToolCalls: f.ToolLoop}},
+		}, nil
 	}
 	return &llms.ContentResponse{
 		Choices: []*llms.ContentChoice{{Content: f.Answer}},

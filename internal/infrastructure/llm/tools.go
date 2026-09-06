@@ -11,8 +11,8 @@ import (
 // Tool — исполняемый инструмент для LLM: описание для модели плюс реализация.
 //
 // Будущие модули (RAG-поиск, запросы к БД, внешние API) добавляют инструмент,
-// реализовав этот интерфейс и передав его в GenerateWithTools — сам паттерн
-// вызова не меняется.
+// реализовав этот интерфейс и передав его в машину состояний диалога или в
+// GenerateWithTools — сам паттерн вызова не меняется.
 type Tool interface {
 	// Name — имя функции; должно совпадать с Definition().Function.Name.
 	Name() string
@@ -25,6 +25,74 @@ type Tool interface {
 	Execute(ctx context.Context, argumentsJSON string) (string, error)
 }
 
+// ToolDefinitions собирает описания инструментов для llms.WithTools.
+func ToolDefinitions(tools []Tool) []llms.Tool {
+	defs := make([]llms.Tool, 0, len(tools))
+	for _, t := range tools {
+		defs = append(defs, t.Definition())
+	}
+	return defs
+}
+
+// AssistantToolCallMessage восстанавливает сообщение ассистента (текст плюс
+// запросы инструментов) из варианта ответа модели — модель ожидает его в
+// истории перед результатами инструментов. nil-choice → пустое AI-сообщение.
+func AssistantToolCallMessage(choice *llms.ContentChoice) llms.MessageContent {
+	if choice == nil {
+		return llms.MessageContent{Role: llms.ChatMessageTypeAI}
+	}
+	parts := make([]llms.ContentPart, 0, len(choice.ToolCalls)+1)
+	if choice.Content != "" {
+		parts = append(parts, llms.TextContent{Text: choice.Content})
+	}
+	for _, tc := range choice.ToolCalls {
+		parts = append(parts, tc)
+	}
+	return llms.MessageContent{Role: llms.ChatMessageTypeAI, Parts: parts}
+}
+
+// ToolCallsFromMessage извлекает запросы инструментов из сообщения.
+func ToolCallsFromMessage(msg llms.MessageContent) []llms.ToolCall {
+	var calls []llms.ToolCall
+	for _, p := range msg.Parts {
+		if tc, ok := p.(llms.ToolCall); ok {
+			calls = append(calls, tc)
+		}
+	}
+	return calls
+}
+
+// ExecuteToolCalls выполняет запрошенные моделью инструменты и возвращает по
+// одному tool-сообщению на каждый вызов, в том же порядке.
+//
+// Любая проблема (неизвестный инструмент, ошибка выполнения, паника,
+// некорректный запрос) деградирует в текстовое «Error: ...» — модель должна
+// суметь на это ответить, а не ронять запрос 5xx.
+func ExecuteToolCalls(ctx context.Context, tools []Tool, calls []llms.ToolCall, logger *slog.Logger) []llms.MessageContent {
+	if logger == nil {
+		logger = slog.Default()
+	}
+	log := logger.With(slog.String("component", "llm.tools"))
+
+	byName := make(map[string]Tool, len(tools))
+	for _, t := range tools {
+		byName[t.Name()] = t
+	}
+
+	msgs := make([]llms.MessageContent, 0, len(calls))
+	for _, tc := range calls {
+		msgs = append(msgs, llms.MessageContent{
+			Role: llms.ChatMessageTypeTool,
+			Parts: []llms.ContentPart{llms.ToolCallResponse{
+				ToolCallID: tc.ID,
+				Name:       toolCallName(tc),
+				Content:    runToolCall(ctx, log, byName, tc),
+			}},
+		})
+	}
+	return msgs
+}
+
 // GenerateWithTools выполняет ровно один раунд tool calling:
 //
 //  1. запрос к модели со списком инструментов;
@@ -34,8 +102,8 @@ type Tool interface {
 //     возвращается модели, и финальный ответ модели возвращается вызывающему.
 //
 // Многошаговые агентные циклы (модель снова просит инструмент после получения
-// результата) вне области этой функции — это веха «Диалог как state machine».
-// Такой случай логируется как WARN, поведение не меняется.
+// результата) реализованы машиной состояний диалога, а не здесь; в этой
+// функции такой случай логируется как WARN, поведение не меняется.
 //
 // Входной срез messages не мутируется.
 func GenerateWithTools(
@@ -56,13 +124,7 @@ func GenerateWithTools(
 		return model.GenerateContent(ctx, messages, opts...)
 	}
 
-	defs := make([]llms.Tool, 0, len(tools))
-	byName := make(map[string]Tool, len(tools))
-	for _, t := range tools {
-		defs = append(defs, t.Definition())
-		byName[t.Name()] = t
-	}
-	callOpts := append([]llms.CallOption{llms.WithTools(defs)}, opts...)
+	callOpts := append([]llms.CallOption{llms.WithTools(ToolDefinitions(tools))}, opts...)
 
 	resp, err := model.GenerateContent(ctx, messages, callOpts...)
 	if err != nil {
@@ -79,18 +141,8 @@ func GenerateWithTools(
 	// инструментов + результат каждого инструмента. Входной messages не трогаем.
 	extended := make([]llms.MessageContent, 0, len(messages)+1+len(choice.ToolCalls))
 	extended = append(extended, messages...)
-	extended = append(extended, assistantToolCallMessage(choice))
-
-	for _, tc := range choice.ToolCalls {
-		extended = append(extended, llms.MessageContent{
-			Role: llms.ChatMessageTypeTool,
-			Parts: []llms.ContentPart{llms.ToolCallResponse{
-				ToolCallID: tc.ID,
-				Name:       toolCallName(tc),
-				Content:    runToolCall(ctx, log, byName, tc),
-			}},
-		})
-	}
+	extended = append(extended, AssistantToolCallMessage(choice))
+	extended = append(extended, ExecuteToolCalls(ctx, tools, choice.ToolCalls, logger)...)
 
 	final, err := model.GenerateContent(ctx, extended, callOpts...)
 	if err != nil {
@@ -102,7 +154,7 @@ func GenerateWithTools(
 		for _, tc := range final.Choices[0].ToolCalls {
 			names = append(names, toolCallName(tc))
 		}
-		log.WarnContext(ctx, "final response still requests tools; multi-round tool calling not supported",
+		log.WarnContext(ctx, "final response still requests tools; multi-round tool calling not supported here",
 			slog.Any("tool_names", names),
 		)
 	}
@@ -111,9 +163,7 @@ func GenerateWithTools(
 }
 
 // runToolCall находит и выполняет один инструмент, возвращая текст результата
-// для модели. Любая проблема (неизвестный инструмент, ошибка выполнения,
-// паника) деградирует в текстовое «Error: ...» — модель должна суметь на это
-// ответить, а не ронять запрос 5xx.
+// для модели.
 func runToolCall(ctx context.Context, log *slog.Logger, byName map[string]Tool, tc llms.ToolCall) string {
 	if tc.FunctionCall == nil {
 		log.WarnContext(ctx, "malformed tool call", slog.String("tool_call_id", tc.ID))
@@ -153,19 +203,6 @@ func safeExecute(ctx context.Context, tool Tool, argumentsJSON string) (result s
 		}
 	}()
 	return tool.Execute(ctx, argumentsJSON)
-}
-
-// assistantToolCallMessage восстанавливает сообщение ассистента с запросами
-// инструментов — модель ожидает его в истории перед результатами инструментов.
-func assistantToolCallMessage(choice *llms.ContentChoice) llms.MessageContent {
-	parts := make([]llms.ContentPart, 0, len(choice.ToolCalls)+1)
-	if choice.Content != "" {
-		parts = append(parts, llms.TextContent{Text: choice.Content})
-	}
-	for _, tc := range choice.ToolCalls {
-		parts = append(parts, tc)
-	}
-	return llms.MessageContent{Role: llms.ChatMessageTypeAI, Parts: parts}
 }
 
 // toolCallName безопасно достаёт имя функции из запроса инструмента.

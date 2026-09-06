@@ -85,3 +85,60 @@ func TestDialogMachine_Run_PropagatesError(t *testing.T) {
 	require.ErrorContains(t, err, "openai down")
 	require.ErrorContains(t, err, `состояние "agent"`)
 }
+
+func timeCall(id string) llms.ToolCall {
+	return llms.ToolCall{
+		ID:           id,
+		Type:         "function",
+		FunctionCall: &llms.FunctionCall{Name: "get_current_time", Arguments: `{}`},
+	}
+}
+
+func TestDialogMachine_Run_MultipleToolRounds(t *testing.T) {
+	// Два раунда tool calling подряд — было невозможно при ограничении «один раунд».
+	fake := &llmtest.Fake{Responses: []llmtest.Response{
+		{ToolCalls: []llms.ToolCall{timeCall("c1")}},
+		{ToolCalls: []llms.ToolCall{timeCall("c2")}},
+		{Content: "финал"},
+	}}
+	m := newMachine(fake)
+
+	st, err := m.Run(context.Background(), []llms.MessageContent{
+		llms.TextParts(llms.ChatMessageTypeHuman, "?"),
+	})
+	require.NoError(t, err)
+	require.Equal(t, 3, fake.Calls, "agent → tools → agent → tools → agent")
+	require.Equal(t, "финал", lastMessageText(st.messages))
+}
+
+func TestDialogMachine_Run_StateIncludesToolMessages(t *testing.T) {
+	fake := &llmtest.Fake{Responses: []llmtest.Response{
+		{ToolCalls: []llms.ToolCall{timeCall("c1")}},
+		{Content: "готово"},
+	}}
+	m := newMachine(fake)
+
+	st, err := m.Run(context.Background(), []llms.MessageContent{
+		llms.TextParts(llms.ChatMessageTypeHuman, "?"),
+	})
+	require.NoError(t, err)
+
+	var toolMsgs int
+	for _, msg := range st.messages {
+		if msg.Role == llms.ChatMessageTypeTool {
+			toolMsgs++
+		}
+	}
+	require.Equal(t, 1, toolMsgs, "результат инструмента накоплен в состоянии")
+}
+
+func TestDialogMachine_Run_StepLimitExceeded(t *testing.T) {
+	// Модель бесконечно запрашивает инструмент — предохранитель должен сработать.
+	fake := &llmtest.Fake{ToolLoop: []llms.ToolCall{timeCall("loop")}}
+	m := newMachine(fake)
+
+	_, err := m.Run(context.Background(), []llms.MessageContent{
+		llms.TextParts(llms.ChatMessageTypeHuman, "?"),
+	})
+	require.ErrorContains(t, err, "лимит шагов")
+}

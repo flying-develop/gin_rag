@@ -172,3 +172,44 @@ func TestGenerateWithTools_PrimaryCallError_Wrapped(t *testing.T) {
 	_, err := llm.GenerateWithTools(context.Background(), fake, []llm.Tool{tool}, input, nil)
 	require.ErrorContains(t, err, "openai down")
 }
+
+func TestExecuteToolCalls_Success_OrderPreserved(t *testing.T) {
+	a := &fakeTool{name: "a", result: "ra"}
+	b := &fakeTool{name: "b", result: "rb"}
+	calls := []llms.ToolCall{toolCall("c1", "a", `{}`), toolCall("c2", "b", `{}`)}
+
+	msgs := llm.ExecuteToolCalls(context.Background(), []llm.Tool{a, b}, calls, nil)
+	trs := toolResponses(msgs)
+	require.Len(t, trs, 2)
+	require.Equal(t, "c1", trs[0].ToolCallID)
+	require.Equal(t, "a", trs[0].Name)
+	require.Equal(t, "ra", trs[0].Content)
+	require.Equal(t, "c2", trs[1].ToolCallID)
+	require.Equal(t, "rb", trs[1].Content)
+}
+
+func TestExecuteToolCalls_UnknownTool(t *testing.T) {
+	msgs := llm.ExecuteToolCalls(context.Background(), []llm.Tool{&fakeTool{name: "a"}},
+		[]llms.ToolCall{toolCall("c1", "nope", `{}`)}, nil)
+	trs := toolResponses(msgs)
+	require.Len(t, trs, 1)
+	require.Contains(t, trs[0].Content, "unknown tool")
+}
+
+func TestExecuteToolCalls_ExecutionError(t *testing.T) {
+	tool := &fakeTool{name: "a", err: errors.New("boom")}
+	msgs := llm.ExecuteToolCalls(context.Background(), []llm.Tool{tool},
+		[]llms.ToolCall{toolCall("c1", "a", `{}`)}, nil)
+	trs := toolResponses(msgs)
+	require.Len(t, trs, 1)
+	require.Contains(t, trs[0].Content, "failed")
+	require.Contains(t, trs[0].Content, "boom")
+}
+
+func TestExecuteToolCalls_MalformedCall(t *testing.T) {
+	msgs := llm.ExecuteToolCalls(context.Background(), nil,
+		[]llms.ToolCall{{ID: "c1", Type: "function"}}, nil)
+	trs := toolResponses(msgs)
+	require.Len(t, trs, 1)
+	require.Contains(t, trs[0].Content, "malformed")
+}

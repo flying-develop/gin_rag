@@ -103,11 +103,12 @@ blank-import `_ "time/tzdata"` — база встроена в бинарь (~4
 
 ## В диалоге
 
-`ChatService.SendMessage` вызывает `GenerateWithTools` вместо прямого
-`GenerateContent`. Промежуточный обмен (запрос инструмента + его результат)
-**не сохраняется** в `dialog_messages` — в историю диалога попадает только
-финальный текстовый ответ ассистента. Полный обмен живёт в рамках одного
-вызова `SendMessage`.
+`ChatService.SendMessage` прогоняет машину состояний диалога
+([dialog-state-machine.md](dialog-state-machine.md)); `GenerateWithTools`
+вызывается внутри состояния `agent`. Промежуточный обмен (запрос
+инструмента + его результат) **не сохраняется** в `dialog_messages` — в
+историю диалога попадает только финальный текстовый ответ ассистента.
+Полный обмен живёт в рамках одного вызова `SendMessage`.
 
 ## Тесты
 
@@ -128,5 +129,6 @@ docker compose run --rm tests
 ## See Also
 
 - [Модуль dialog](dialog.md) — где подключается tool calling
+- [Машина состояний диалога](dialog-state-machine.md) — состояние `agent` вызывает `GenerateWithTools`
 - [Конфигурация](configuration.md) — `OPENAI_API_KEY`, `OPENAI_MODEL`
 - [Архитектура](../.ai-factory/ARCHITECTURE.md) — место `internal/infrastructure/llm`

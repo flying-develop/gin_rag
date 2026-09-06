@@ -57,10 +57,11 @@ internal/modules/dialog/
 
 1. проверяет существование диалога (иначе 404);
 2. читает историю (до 100 последних сообщений);
-3. вызывает chat-модель через `internal/infrastructure/llm` (langchaingo,
-   провайдер OpenAI за интерфейсом `llms.Model`);
+3. прогоняет машину состояний диалога (`service/machine.go`) — внутри
+   состояния `agent` вызов chat-модели через `internal/infrastructure/llm`
+   (langchaingo, провайдер OpenAI за интерфейсом `llms.Model`);
 4. **при успешном ответе** одной транзакцией сохраняет сообщение
-   пользователя и ответ ассистента, возвращает ответ ассистента (201).
+   пользователя и финальный ответ ассистента, возвращает его (201).
 
 Поведение **атомарное**: если вызов LLM завершился ошибкой — ответ `502`
 (`{"error":"llm request failed"}`), в БД ничего не пишется. Если
@@ -70,13 +71,14 @@ internal/modules/dialog/
 Конфигурация: `OPENAI_API_KEY` (обязателен для чата), `OPENAI_MODEL`
 (по умолчанию `gpt-4o-mini`) — см. [configuration.md](configuration.md).
 
-### Tool calling
+### Машина состояний и tool calling
 
-Шаг 3 идёт через `llm.GenerateWithTools` — модель может вызвать
-инструмент-функцию (например `get_current_time`), его результат
-возвращается модели, и она формирует финальный ответ. Один раунд без
-рекурсии; промежуточный обмен в `dialog_messages` не сохраняется.
-Подробности и как добавить инструмент — [tool-calling.md](tool-calling.md).
+Шаг 3 — прогон машины состояний ([dialog-state-machine.md](dialog-state-machine.md)).
+Пока одно состояние `agent`, внутри которого `llm.GenerateWithTools`:
+модель может вызвать инструмент-функцию (например `get_current_time`), его
+результат возвращается модели, и она формирует финальный ответ. Один раунд
+без рекурсии; промежуточный обмен в `dialog_messages` не сохраняется.
+Как добавить инструмент — [tool-calling.md](tool-calling.md).
 
 ## Обработка ошибок
 
@@ -127,4 +129,5 @@ docker compose run --rm tests
 
 - [БД и миграции](db.md) — GORM engine, транзакции, миграции
 - [Tool calling](tool-calling.md) — вызов инструментов моделью
+- [Машина состояний диалога](dialog-state-machine.md) — `dialogState`, состояние `agent`, `Run`
 - [Архитектура](../.ai-factory/ARCHITECTURE.md) — паттерн Structured Modules

@@ -30,6 +30,7 @@ curl http://localhost:8080/health
 - **Модуль `dialog`** — CRUD по диалогам (`/api/v1/dialogs`) по паттерну Structured Modules, единый обработчик ошибок.
 - **Базовый чат с LLM** — `POST /api/v1/dialogs/:id/messages`: вызов chat-модели (langchaingo/OpenAI) с историей диалога, атомарное сохранение сообщений.
 - **Tool calling** — переиспользуемый паттерн `llm.GenerateWithTools`: модель вызывает инструменты-функции (JSON Schema параметров), результат возвращается модели. Пример-инструмент `get_current_time`.
+- **Машина состояний диалога** — логика диалога оформлена как явная машина состояний (`service/machine.go`); сейчас одно состояние `agent`, задел под многошаговый агентный цикл.
 - **Локальное окружение в Docker** — `app` + PostgreSQL + Redis + Qdrant одной командой.
 
 Остальное (RAG, task pipeline, модерация) появляется поэтапно — см.
@@ -44,6 +45,7 @@ curl http://localhost:8080/health
 | [БД и миграции](docs/db.md) | GORM engine/пул, golang-migrate, тесты |
 | [Модуль dialog](docs/dialog.md) | CRUD по диалогам, структура модуля, эндпоинты |
 | [Tool calling](docs/tool-calling.md) | Паттерн вызова инструментов моделью, как добавить инструмент |
+| [Машина состояний диалога](docs/dialog-state-machine.md) | `dialogState`, состояние `agent`, раннер `Run` |
 | [Архитектура](.ai-factory/ARCHITECTURE.md) | Паттерн Structured Modules, структура папок, правила зависимостей |
 | [Описание проекта](.ai-factory/DESCRIPTION.md) | Цели, стек |
 | [Roadmap](.ai-factory/ROADMAP.md) | Этапы разработки |

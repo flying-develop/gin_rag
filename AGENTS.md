@@ -44,12 +44,16 @@ migrations/                    # SQL up/down (golang-migrate) + embed.go
 ```
 
 Текущее состояние: вехи `Bootstrap проекта`, `Фундамент работы с БД`,
-`Диалоги с LLM (базовый чат)` завершены (2026-09-01). Есть:
+`Диалоги с LLM (базовый чат)` (2026-09-01) и
+`Tool calling у LLM (structured output)` (2026-09-06) завершены. Есть:
 - `internal/infrastructure/{config,logging,httpserver,db,llm}`
-  (`llm` — langchaingo/OpenAI за `llms.Model`; `llm/llmtest` — fake для тестов)
+  (`llm` — langchaingo/OpenAI за `llms.Model`; `llm/tools.go` — интерфейс
+  `Tool` + хелпер `GenerateWithTools` (один раунд tool calling);
+  `llm/llmtest` — fake для тестов, поддерживает скриптованные `ToolCalls`)
 - `internal/apperr` — доменные ошибки (+ `KindUpstream` → 502)
-- `internal/modules/dialog/` — CRUD `/api/v1/dialogs` + чат `/dialogs/:id/messages`
-- `cmd/api` — подкоманды `healthcheck`, `migrate up|down`
+- `internal/modules/dialog/` — CRUD `/api/v1/dialogs` + чат `/dialogs/:id/messages`;
+  `service/tools.go` — пример-инструмент `get_current_time` + список `DialogTools`
+- `cmd/api` — подкоманды `healthcheck`, `migrate up|down`; blank-import `_ "time/tzdata"`
 - `Dockerfile`, `docker-compose.yml` (+ сервис `tests`, профиль `tools`)
 
 ## Ключевые точки входа
@@ -65,8 +69,10 @@ migrations/                    # SQL up/down (golang-migrate) + embed.go
 | `internal/infrastructure/db/migrate.go` | `Migrate(cfg, up\|down)` поверх golang-migrate |
 | `internal/infrastructure/httpserver/errors.go` | `errorHandler` — `apperr.Kind` → HTTP-код |
 | `internal/infrastructure/llm/llm.go` | `New(cfg) (llms.Model, error)` — chat-модель langchaingo (OpenAI) |
+| `internal/infrastructure/llm/tools.go` | `Tool` интерфейс + `GenerateWithTools` — один раунд tool calling |
 | `internal/apperr/apperr.go` | доменные ошибки (`NotFound`/`Validation`/`Conflict`/`Upstream`/`Internal`) |
-| `internal/modules/dialog/` | модуль dialog: CRUD + `ChatService` (сообщения, вызов LLM) |
+| `internal/modules/dialog/` | модуль dialog: CRUD + `ChatService` (сообщения, вызов LLM с инструментами) |
+| `internal/modules/dialog/service/tools.go` | пример-инструмент `get_current_time` + `DialogTools` |
 | `migrations/` | SQL up/down + `embed.go` (встроены в бинарь через `go:embed`) |
 | `Dockerfile` | multi-stage сборка статического бинаря → distroless |
 | `docker-compose.yml` | локальное окружение: app + PostgreSQL + Redis + Qdrant + `tests` (профиль `tools`) |
@@ -89,6 +95,7 @@ migrations/                    # SQL up/down (golang-migrate) + embed.go
 | Конфигурация | `docs/configuration.md` | Переменные окружения |
 | БД и миграции | `docs/db.md` | GORM engine/пул, `WithinTx`, golang-migrate, тесты |
 | Модуль dialog | `docs/dialog.md` | CRUD по диалогам, структура модуля, эндпоинты |
+| Tool calling | `docs/tool-calling.md` | Паттерн `GenerateWithTools`, `Tool`, как добавить инструмент |
 | DESCRIPTION | `.ai-factory/DESCRIPTION.md` | Спецификация проекта, стек |
 | ARCHITECTURE | `.ai-factory/ARCHITECTURE.md` | Structured Modules — структура папок, правила зависимостей, примеры кода |
 | Roadmap | `.ai-factory/ROADMAP.md` | Этапы разработки |

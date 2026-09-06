@@ -8,19 +8,51 @@ import (
 	"github.com/tmc/langchaingo/llms"
 )
 
-// Fake — подставная chat-модель. Возвращает Answer (или Err, если задана)
-// и запоминает последний переданный запрос в LastMessages.
+// Response — один заскриптованный ответ модели для Fake.Responses.
+// Позволяет тестировать tool calling: первый Response с ToolCalls, следующий —
+// финальный текст.
+type Response struct {
+	Content   string
+	ToolCalls []llms.ToolCall
+	Err       error
+}
+
+// Fake — подставная chat-модель.
+//
+// Режим по умолчанию: возвращает Answer (или Err, если задана) на каждый вызов.
+// Режим скрипта: если задан Responses, каждый вызов GenerateContent берёт
+// следующий элемент очереди (для многошаговых сценариев вроде tool calling).
 type Fake struct {
-	Answer       string
-	Err          error
+	Answer string
+	Err    error
+
+	// Responses — очередь заскриптованных ответов; если непусто, имеет
+	// приоритет над Answer/Err.
+	Responses []Response
+
 	LastMessages []llms.MessageContent
-	Calls        int
+	// Prompts — копия messages каждого вызова GenerateContent по порядку.
+	Prompts [][]llms.MessageContent
+	Calls   int
 }
 
 // GenerateContent реализует llms.Model.
 func (f *Fake) GenerateContent(_ context.Context, messages []llms.MessageContent, _ ...llms.CallOption) (*llms.ContentResponse, error) {
 	f.Calls++
 	f.LastMessages = messages
+	f.Prompts = append(f.Prompts, append([]llms.MessageContent(nil), messages...))
+
+	if len(f.Responses) > 0 {
+		r := f.Responses[0]
+		f.Responses = f.Responses[1:]
+		if r.Err != nil {
+			return nil, r.Err
+		}
+		return &llms.ContentResponse{
+			Choices: []*llms.ContentChoice{{Content: r.Content, ToolCalls: r.ToolCalls}},
+		}, nil
+	}
+
 	if f.Err != nil {
 		return nil, f.Err
 	}

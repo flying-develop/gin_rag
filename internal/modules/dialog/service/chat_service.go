@@ -11,6 +11,7 @@ import (
 
 	"github.com/flying-develop/ai-app-go/internal/apperr"
 	"github.com/flying-develop/ai-app-go/internal/infrastructure/db"
+	"github.com/flying-develop/ai-app-go/internal/infrastructure/llm"
 	"github.com/flying-develop/ai-app-go/internal/modules/dialog/model"
 )
 
@@ -18,21 +19,25 @@ import (
 const historyLimit = 100
 
 // ChatService реализует базовый чат: сообщение пользователя → вызов LLM
-// с историей диалога → сохранение обоих сообщений.
+// с историей диалога (с доступом к инструментам) → сохранение обоих сообщений.
 type ChatService struct {
-	repo DialogRepository
-	db   *gorm.DB
-	llm  llms.Model
-	log  *slog.Logger
+	repo  DialogRepository
+	db    *gorm.DB
+	llm   llms.Model
+	tools []llm.Tool
+	log   *slog.Logger
 }
 
-// NewChatService собирает сервис чата.
-func NewChatService(repo DialogRepository, database *gorm.DB, model llms.Model) *ChatService {
+// NewChatService собирает сервис чата. tools — инструменты, доступные модели
+// в рамках диалога (см. DialogTools); nil/пустой список = обычный чат без
+// tool calling.
+func NewChatService(repo DialogRepository, database *gorm.DB, model llms.Model, tools []llm.Tool) *ChatService {
 	return &ChatService{
-		repo: repo,
-		db:   database,
-		llm:  model,
-		log:  slog.Default().With(slog.String("component", "dialog.chat")),
+		repo:  repo,
+		db:    database,
+		llm:   model,
+		tools: tools,
+		log:   slog.Default().With(slog.String("component", "dialog.chat")),
 	}
 }
 
@@ -63,7 +68,10 @@ func (s *ChatService) SendMessage(ctx context.Context, dialogID uint, text strin
 	prompt := buildPrompt(history, text)
 
 	started := time.Now()
-	resp, err := s.llm.GenerateContent(ctx, prompt)
+	// GenerateWithTools делает обычный вызов, если tools пуст; иначе — один
+	// раунд tool calling. Промежуточный обмен (запрос инструмента/результат)
+	// в dialog_messages не сохраняется — в историю идёт только финальный ответ.
+	resp, err := llm.GenerateWithTools(ctx, s.llm, s.tools, prompt, s.log)
 	if err != nil {
 		s.log.ErrorContext(ctx, "llm request failed",
 			slog.Uint64("dialog_id", uint64(dialogID)),

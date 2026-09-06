@@ -70,6 +70,14 @@ internal/modules/dialog/
 Конфигурация: `OPENAI_API_KEY` (обязателен для чата), `OPENAI_MODEL`
 (по умолчанию `gpt-4o-mini`) — см. [configuration.md](configuration.md).
 
+### Tool calling
+
+Шаг 3 идёт через `llm.GenerateWithTools` — модель может вызвать
+инструмент-функцию (например `get_current_time`), его результат
+возвращается модели, и она формирует финальный ответ. Один раунд без
+рекурсии; промежуточный обмен в `dialog_messages` не сохраняется.
+Подробности и как добавить инструмент — [tool-calling.md](tool-calling.md).
+
 ## Обработка ошибок
 
 Доменные ошибки описаны через `internal/apperr` (категории `NotFound`,
@@ -111,10 +119,12 @@ docker compose run --rm tests
 
 ## Вне объёма (следующие вехи)
 
-- Streaming-ответы (SSE), tool calling, RAG-контекст — отдельные вехи.
+- Streaming-ответы (SSE), RAG-контекст — отдельные вехи.
+- Многошаговые агентные циклы (рекурсивный tool calling) — веха «Диалог как state machine».
 - Аутентификация: `user_id` пока приходит в запросе — веха «API-ключи и контексты доступа».
 
 ## See Also
 
 - [БД и миграции](db.md) — GORM engine, транзакции, миграции
+- [Tool calling](tool-calling.md) — вызов инструментов моделью
 - [Архитектура](../.ai-factory/ARCHITECTURE.md) — паттерн Structured Modules

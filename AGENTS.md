@@ -45,14 +45,17 @@ migrations/                    # SQL up/down (golang-migrate) + embed.go
 
 Текущее состояние: вехи `Bootstrap проекта`, `Фундамент работы с БД`,
 `Диалоги с LLM (базовый чат)` (2026-09-01) и
-`Tool calling у LLM (structured output)` (2026-09-06) завершены. Есть:
+`Tool calling у LLM (structured output)` (2026-09-06) завершены.
+Веха `Диалог как state machine` — в работе (план 1/2: базовый скелет
+машины, `service/machine.go`). Есть:
 - `internal/infrastructure/{config,logging,httpserver,db,llm}`
   (`llm` — langchaingo/OpenAI за `llms.Model`; `llm/tools.go` — интерфейс
   `Tool` + хелпер `GenerateWithTools` (один раунд tool calling);
   `llm/llmtest` — fake для тестов, поддерживает скриптованные `ToolCalls`)
 - `internal/apperr` — доменные ошибки (+ `KindUpstream` → 502)
 - `internal/modules/dialog/` — CRUD `/api/v1/dialogs` + чат `/dialogs/:id/messages`;
-  `service/tools.go` — пример-инструмент `get_current_time` + список `DialogTools`
+  `service/tools.go` — пример-инструмент `get_current_time` + список `DialogTools`;
+  `service/machine.go` — явная машина состояний диалога (`dialogMachine`, состояние `agent`)
 - `cmd/api` — подкоманды `healthcheck`, `migrate up|down`; blank-import `_ "time/tzdata"`
 - `Dockerfile`, `docker-compose.yml` (+ сервис `tests`, профиль `tools`)
 
@@ -73,6 +76,7 @@ migrations/                    # SQL up/down (golang-migrate) + embed.go
 | `internal/apperr/apperr.go` | доменные ошибки (`NotFound`/`Validation`/`Conflict`/`Upstream`/`Internal`) |
 | `internal/modules/dialog/` | модуль dialog: CRUD + `ChatService` (сообщения, вызов LLM с инструментами) |
 | `internal/modules/dialog/service/tools.go` | пример-инструмент `get_current_time` + `DialogTools` |
+| `internal/modules/dialog/service/machine.go` | машина состояний диалога: `dialogState`, состояние `agent`, `Run` |
 | `migrations/` | SQL up/down + `embed.go` (встроены в бинарь через `go:embed`) |
 | `Dockerfile` | multi-stage сборка статического бинаря → distroless |
 | `docker-compose.yml` | локальное окружение: app + PostgreSQL + Redis + Qdrant + `tests` (профиль `tools`) |
@@ -96,6 +100,7 @@ migrations/                    # SQL up/down (golang-migrate) + embed.go
 | БД и миграции | `docs/db.md` | GORM engine/пул, `WithinTx`, golang-migrate, тесты |
 | Модуль dialog | `docs/dialog.md` | CRUD по диалогам, структура модуля, эндпоинты |
 | Tool calling | `docs/tool-calling.md` | Паттерн `GenerateWithTools`, `Tool`, как добавить инструмент |
+| Машина состояний диалога | `docs/dialog-state-machine.md` | `dialogState`, состояние `agent`, раннер `Run` |
 | DESCRIPTION | `.ai-factory/DESCRIPTION.md` | Спецификация проекта, стек |
 | ARCHITECTURE | `.ai-factory/ARCHITECTURE.md` | Structured Modules — структура папок, правила зависимостей, примеры кода |
 | Roadmap | `.ai-factory/ROADMAP.md` | Этапы разработки |

@@ -18,26 +18,30 @@ import (
 // historyLimit — сколько последних сообщений диалога передаётся в LLM.
 const historyLimit = 100
 
-// ChatService реализует базовый чат: сообщение пользователя → вызов LLM
-// с историей диалога (с доступом к инструментам) → сохранение обоих сообщений.
+// ChatService реализует базовый чат: сообщение пользователя → прогон машины
+// состояний диалога с историей → сохранение обоих сообщений.
 type ChatService struct {
-	repo  DialogRepository
-	db    *gorm.DB
-	llm   llms.Model
-	tools []llm.Tool
-	log   *slog.Logger
+	repo    DialogRepository
+	db      *gorm.DB
+	machine *dialogMachine
+	log     *slog.Logger
 }
 
 // NewChatService собирает сервис чата. tools — инструменты, доступные модели
 // в рамках диалога (см. DialogTools); nil/пустой список = обычный чат без
-// tool calling.
+// tool calling. При model == nil машина не строится и эндпоинты чата
+// отвечают 502 "llm not configured".
 func NewChatService(repo DialogRepository, database *gorm.DB, model llms.Model, tools []llm.Tool) *ChatService {
+	log := slog.Default().With(slog.String("component", "dialog.chat"))
+	var machine *dialogMachine
+	if model != nil {
+		machine = newDialogMachine(model, tools, log)
+	}
 	return &ChatService{
-		repo:  repo,
-		db:    database,
-		llm:   model,
-		tools: tools,
-		log:   slog.Default().With(slog.String("component", "dialog.chat")),
+		repo:    repo,
+		db:      database,
+		machine: machine,
+		log:     log,
 	}
 }
 
@@ -48,7 +52,7 @@ func NewChatService(repo DialogRepository, database *gorm.DB, model llms.Model, 
 // при сбое вызова возвращается ошибка категории Upstream (HTTP 502), в БД
 // ничего не пишется.
 func (s *ChatService) SendMessage(ctx context.Context, dialogID uint, text string) (*model.DialogMessage, error) {
-	if s.llm == nil {
+	if s.machine == nil {
 		return nil, apperr.Upstream("llm not configured", nil)
 	}
 
@@ -68,10 +72,11 @@ func (s *ChatService) SendMessage(ctx context.Context, dialogID uint, text strin
 	prompt := buildPrompt(history, text)
 
 	started := time.Now()
-	// GenerateWithTools делает обычный вызов, если tools пуст; иначе — один
-	// раунд tool calling. Промежуточный обмен (запрос инструмента/результат)
-	// в dialog_messages не сохраняется — в историю идёт только финальный ответ.
-	resp, err := llm.GenerateWithTools(ctx, s.llm, s.tools, prompt, s.log)
+	// Прогон машины состояний. Пока одно состояние agent, внутри которого —
+	// один раунд tool calling через llm.GenerateWithTools. Промежуточные
+	// сообщения машины в dialog_messages не сохраняются — в историю идёт
+	// только финальный ответ.
+	final, err := s.machine.Run(ctx, prompt)
 	if err != nil {
 		s.log.ErrorContext(ctx, "llm request failed",
 			slog.Uint64("dialog_id", uint64(dialogID)),
@@ -80,7 +85,7 @@ func (s *ChatService) SendMessage(ctx context.Context, dialogID uint, text strin
 		return nil, apperr.Upstream("llm request failed", err)
 	}
 
-	answer := firstChoice(resp)
+	answer := lastMessageText(final.messages)
 
 	userMsg := &model.DialogMessage{DialogID: dialogID, Role: model.RoleUser, Content: text}
 	assistantMsg := &model.DialogMessage{DialogID: dialogID, Role: model.RoleAssistant, Content: answer}

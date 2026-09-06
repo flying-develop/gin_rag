@@ -29,10 +29,11 @@ curl http://localhost:8080/health
 - **PostgreSQL через GORM** — engine/пул соединений, хелпер транзакций, миграции golang-migrate (встроены в бинарь, `app migrate up|down`).
 - **Модуль `dialog`** — CRUD по диалогам (`/api/v1/dialogs`) по паттерну Structured Modules, единый обработчик ошибок.
 - **Базовый чат с LLM** — `POST /api/v1/dialogs/:id/messages`: вызов chat-модели (langchaingo/OpenAI) с историей диалога, атомарное сохранение сообщений.
+- **Tool calling** — переиспользуемый паттерн `llm.GenerateWithTools`: модель вызывает инструменты-функции (JSON Schema параметров), результат возвращается модели. Пример-инструмент `get_current_time`.
 - **Локальное окружение в Docker** — `app` + PostgreSQL + Redis + Qdrant одной командой.
 
-Остальное (tool calling, RAG, task pipeline, модерация) появляется
-поэтапно — см. [roadmap](.ai-factory/ROADMAP.md).
+Остальное (RAG, task pipeline, модерация) появляется поэтапно — см.
+[roadmap](.ai-factory/ROADMAP.md).
 
 ## Документация
 
@@ -42,6 +43,7 @@ curl http://localhost:8080/health
 | [Конфигурация](docs/configuration.md) | Переменные окружения |
 | [БД и миграции](docs/db.md) | GORM engine/пул, golang-migrate, тесты |
 | [Модуль dialog](docs/dialog.md) | CRUD по диалогам, структура модуля, эндпоинты |
+| [Tool calling](docs/tool-calling.md) | Паттерн вызова инструментов моделью, как добавить инструмент |
 | [Архитектура](.ai-factory/ARCHITECTURE.md) | Паттерн Structured Modules, структура папок, правила зависимостей |
 | [Описание проекта](.ai-factory/DESCRIPTION.md) | Цели, стек |
 | [Roadmap](.ai-factory/ROADMAP.md) | Этапы разработки |

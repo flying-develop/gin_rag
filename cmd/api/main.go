@@ -20,6 +20,11 @@ import (
 	"syscall"
 	"time"
 
+	// tzdata встраивает базу таймзон IANA в бинарь: distroless-рантайм не
+	// содержит системную zoneinfo, и без этого time.LoadLocation для любой
+	// зоны кроме UTC/Local возвращает ошибку (нужно инструменту get_current_time).
+	_ "time/tzdata"
+
 	"github.com/flying-develop/ai-app-go/internal/infrastructure/config"
 	"github.com/flying-develop/ai-app-go/internal/infrastructure/db"
 	"github.com/flying-develop/ai-app-go/internal/infrastructure/httpserver"
@@ -90,7 +95,7 @@ func run() error {
 	// Сборка модуля dialog: repository → service(s) → handler.
 	dialogRepo := dialogrepo.NewDialogRepository(gormDB)
 	dialogSvc := dialogservice.NewDialogService(dialogRepo, gormDB)
-	chatSvc := dialogservice.NewChatService(dialogRepo, gormDB, llmClient)
+	chatSvc := dialogservice.NewChatService(dialogRepo, gormDB, llmClient, dialogservice.DialogTools)
 	dialoghandler.NewDialogHandler(dialogSvc, chatSvc).Register(engine.Group("/api/v1"))
 	logger.Info("dialog module mounted", slog.String("prefix", "/api/v1"))
 

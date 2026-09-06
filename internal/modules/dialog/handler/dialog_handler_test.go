@@ -42,7 +42,7 @@ func newRouter(t *testing.T) (*gin.Engine, *llmtest.Fake) {
 	repo := repository.NewDialogRepository(gormDB)
 	svc := service.NewDialogService(repo, gormDB)
 	fake := &llmtest.Fake{Answer: "ответ ассистента"}
-	chat := service.NewChatService(repo, gormDB, fake)
+	chat := service.NewChatService(repo, gormDB, fake, service.DialogTools)
 
 	engine := httpserver.New(cfg, slog.Default())
 	handler.NewDialogHandler(svc, chat).Register(engine.Group("/api/v1"))

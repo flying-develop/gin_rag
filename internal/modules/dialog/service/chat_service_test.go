@@ -33,7 +33,7 @@ func newChat(t *testing.T, fake *llmtest.Fake) (*service.ChatService, *repositor
 	require.NoError(t, gormDB.Exec("TRUNCATE dialogs, dialog_messages RESTART IDENTITY").Error)
 
 	repo := repository.NewDialogRepository(gormDB)
-	return service.NewChatService(repo, gormDB, fake), repo, gormDB
+	return service.NewChatService(repo, gormDB, fake, service.DialogTools), repo, gormDB
 }
 
 func countMessages(t *testing.T, gormDB *gorm.DB, dialogID uint) int64 {
@@ -71,6 +71,30 @@ func TestChatService_SendMessage_DialogNotFound(t *testing.T) {
 
 	_, err := chat.SendMessage(context.Background(), 999, "hi")
 	require.ErrorIs(t, err, service.ErrDialogNotFound)
+}
+
+func TestChatService_SendMessage_UsesToolResultInFinalReply(t *testing.T) {
+	// Первый ответ модели — запрос инструмента get_current_time, второй —
+	// финальный текст. В БД должен попасть только финальный ответ.
+	fake := &llmtest.Fake{Responses: []llmtest.Response{
+		{ToolCalls: []llms.ToolCall{{
+			ID:           "call_1",
+			Type:         "function",
+			FunctionCall: &llms.FunctionCall{Name: "get_current_time", Arguments: `{}`},
+		}}},
+		{Content: "итоговый ответ"},
+	}}
+	chat, repo, gormDB := newChat(t, fake)
+	ctx := context.Background()
+
+	d := &model.Dialog{UserID: 1, Title: "chat"}
+	require.NoError(t, repo.Create(ctx, d))
+
+	msg, err := chat.SendMessage(ctx, d.ID, "который час?")
+	require.NoError(t, err)
+	require.Equal(t, "итоговый ответ", msg.Content)
+	require.Equal(t, 2, fake.Calls, "первичный вызов + финальный после инструмента")
+	require.Equal(t, int64(2), countMessages(t, gormDB, d.ID), "только user + финальный assistant")
 }
 
 func TestChatService_SendMessage_LLMFailure_NothingPersisted(t *testing.T) {
